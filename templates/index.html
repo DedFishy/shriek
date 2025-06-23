@@ -1,0 +1,50 @@
+<!DOCTYPE html>
+<html>
+    <head>
+        <meta name="viewport" content="width=device-width, initial-scale=1.0">
+        <link rel="preconnect" href="https://fonts.googleapis.com">
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+        <link href="https://fonts.googleapis.com/css2?family=Montserrat:ital,wght@0,100..900;1,100..900&display=swap" rel="stylesheet">
+        <title>Shriek</title>
+        <link rel="stylesheet" href="/assets/style.css">
+    </head>
+    <body>
+        <div id="message-display"></div>
+
+        <div id="name-popup" class="visible">
+            <h1>Shriek</h1>
+            <h2>IDENTIFY YOURSELF!</h2>
+            <div class="input-combo">
+                <input id="name-input" type="text", placeholder="Name">
+                <button onclick="submitName()" id="name-submit">👍</button>
+            </div>
+        </div>
+
+        <div id="messages-window">
+            <div id="message-list">
+                <h1 id="message-list-top">
+                    <span>Welcome to the conversation</span>
+                </h1>
+            </div>
+            <div id="message-prompt" class="input-combo">
+                <input id="message-input" type="text" placeholder="Message..." onkeydown="doIfEnter(event, sendMessage)">
+                <button onclick="sendMessage()" id="send-message">➡️</button>
+            </div>
+        </div>
+        <div id="user-list-container">
+            <div id="call-buttons">
+                <button onclick="joinCall()">☎️</button>
+                <button onclick="leaveCall()">❌</button>
+            </div>
+            <div id="user-list"></div>
+        </div>
+
+        <script src="https://cdnjs.cloudflare.com/ajax/libs/socket.io/4.0.1/socket.io.js" integrity="sha512-q/dWJ3kcmjBLU4Qc47E4A9kTB4m3wuTY7vkFJDTZKjTs8jhyGQnaUrxa0Ytd0ssMZhbNua9hE+E7Qv1j+DyZwA==" crossorigin="anonymous"></script>
+        <script src="/assets/script.js"></script>
+
+        <script type="text/javascript">
+            document.getElementById("name-input").value = "Michael 1";
+            document.getElementById("name-submit").click()
+        </script>
+    </body>
+</html>
