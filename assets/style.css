@@ -71,6 +71,7 @@ button:hover {
     background-color: var(--background-color-secondary);
 
     opacity: 0;
+    pointer-events: none;
 }
 #message-display.visible {
     opacity: 1;
@@ -90,6 +91,7 @@ button:hover {
     pointer-events: none;
     opacity: 0;
     transition: 0.2s;
+    background-color: var(--background-color);
 }
 #name-popup.visible {
     pointer-events: all;

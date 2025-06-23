@@ -49,11 +49,12 @@ function addMessage(senderName, content) {
 }
 
 function processRoomUpdate(data) {
+    userList.innerHTML = "";
     data["userlist"].forEach((user) => {
         var userElement = document.createElement("div");
         userElement.className = "user-list-item";
         userElement.innerText = user["name"];
-        if (user["is_in_call"]) {
+        if (user["call_participant_id"] != -1) {
             var inCallEmoji = document.createElement("div");
             inCallEmoji.className = "in-call-emoji";
             inCallEmoji.innerText = "☎️";
@@ -115,19 +116,58 @@ function sendMessage() {
     messageInput.value = "";
 }
 
-let stream;
-let rtcConnection;
-
+let micTrack;
+let micRecorder;
+let transferInProgress = false;
 function joinCall() {
     navigator.mediaDevices.getUserMedia({audio: true, video: false})
     .then((stream) => {
-        let audioTracks = stream.getAudioTracks();
-        if (audioTracks.length > 0) {
-            stream = audioTracks[0];
-            rtcConnection = new RTCPeerConnection();
-            rtcConnection.onicecandidate = gotIceOffer;
-            
+
+        socket.emit("joinVoice");
+        
+        micRecorder = new MediaRecorder(stream, {"mimeType": "audio/webm"});
+        micRecorder.ondataavailable = event => {
+            console.log("Transferring frame")
+            if (transferInProgress) return;
+            transferInProgress = true;
+            const blob = event.data;
+            socket.emit("voiceFrame", blob);
+            transferInProgress = false;
         }
+        micRecorder.start(100);
+    
 
     })
 }
+
+let globufs = []
+
+function createVoiceChannel(id) {
+
+    console.log("Creating voice channel: " + id);
+    let audio = document.createElement("audio")
+    let player = new MediaSource()
+    audio.src = URL.createObjectURL(player);
+    console.log(player.readyState);
+    
+    let buffer = undefined;
+
+    socket.on("userVoiceFrame-" + id, (data) => {
+        if (buffer == undefined) {
+            buffer = player.addSourceBuffer('video/webm; codecs="vp8,opus"')
+        }
+        console.log("Updating " + id)
+        buffer.appendBuffer(data)
+        
+        if (audio.paused) audio.play();
+    })
+}
+
+socket.on("constructVoiceChannel", (data) => {
+    createVoiceChannel(data["participant_id"])
+})
+
+socket.on("destroyVoiceChannel", (data) => {
+    id = data["participant_id"];
+    socket.off("userVoiceFrame-" + id);
+})
