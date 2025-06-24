@@ -17,7 +17,7 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 port = 44375
 mic_send_port = 44376
-audio_recv_port = 44377
+audio_recv_port = 44377+5
 buffsize = 1024
 
 FORMAT = pyaudio.paInt16
@@ -110,6 +110,8 @@ class MessageContent(QLabel):
 
 
 class Window(QMainWindow):
+    waiting_for_voice = False
+
     def __init__(self):
         super().__init__() 
 
@@ -133,6 +135,10 @@ class Window(QMainWindow):
         self.in_call = False
 
     def start_call_threads(self):
+        if self.in_call: return
+        self.waiting_for_voice = True
+        self.send_data("join_voice", {})
+        while self.waiting_for_voice: pass
         self.in_call = True
         self.mic_streamer.streaming = True
         self.audio_streamer.streaming = True
@@ -147,7 +153,11 @@ class Window(QMainWindow):
         self.audio_play_thread.start()
     
     def end_call_threads(self):
+        
         if not self.in_call: return
+        self.waiting_for_voice = True
+        self.send_data("leave_voice", {})
+        while self.waiting_for_voice: pass
         self.in_call = False
         self.mic_streamer.streaming = False
         self.audio_streamer.streaming = False
@@ -167,6 +177,8 @@ class Window(QMainWindow):
             self.emitter.new_message(data["from"], data["message"])
         elif name == "room_update":
             self.emitter.room_update(data)
+        elif name in ["joined_voice", "left_voice"]:
+            self.waiting_for_voice = False
 
     def server_thread(self):
         while True:
@@ -284,7 +296,9 @@ class Window(QMainWindow):
             self.toggle_call_button.setEnabled(True)
 
     def remove_users(self):
+        print("REMOVING ALL USERS")
         for user_list_widget in self.user_list_layout.children():
+            print(user_list_widget)
             user_list_widget.deleteLater()
 
     def add_user(self, name):
@@ -304,6 +318,7 @@ class Window(QMainWindow):
 
     def room_update(self, data):
         print(data)
+        self.remove_users()
         for user in data["user_list"]:
             self.add_user(user["name"])
 
