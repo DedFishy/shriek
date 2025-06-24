@@ -7,7 +7,8 @@ import sys
 import chars
 import json
 from threading import Thread
-import numpy as np
+import markdown
+import html
 
 import random
 username = "skibidi" + str(random.randint(0, 9999))
@@ -53,7 +54,7 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__() 
 
-        self.setWindowTitle("Shriek")
+        
         self.setWindowIcon(QIcon("icon.png"))
         self.setGeometry(50, 50, 500, 100)
 
@@ -65,6 +66,8 @@ class Window(QMainWindow):
         self.emitter = Emitter()
         self.emitter.new_message_signal.connect(self.add_message)
         self.emitter.room_update_signal.connect(self.room_update)
+
+        self.setWindowTitle("Shriek - Connected to " + self.ip_input.text() + " as " + self.name_input.text())
 
         self.user_list_stretch = None
 
@@ -218,7 +221,7 @@ class Window(QMainWindow):
     def add_message(self, sender, message):
         self.message_list_widget.insertHtml("<br><strong>" + sender + "</strong> ")
         self.message_list_widget.setAutoFormatting(QTextEdit.AutoFormattingFlag.AutoAll)
-        self.message_list_widget.insertHtml(message)
+        self.message_list_widget.insertHtml(markdown.markdown(html.escape(message)))
         self.message_list_widget.verticalScrollBar().setValue(self.message_list_widget.maximumHeight())
 
     def room_update(self, data):
