@@ -5,6 +5,8 @@ import chars
 import json
 from userman import UserManager
 
+PORT = 44375
+
 userman = UserManager()
 
 clients: dict[tuple, socket.socket] = {}
@@ -79,9 +81,8 @@ def client_thread(client_sock: socket.socket, address: tuple):
     send_room_update()
 
 
-port = 44375
 
-sock.bind(("0.0.0.0", port))
+sock.bind(("0.0.0.0", PORT))
 
 try:
     while True:
