@@ -156,7 +156,7 @@ class Window(QMainWindow):
 
         self.connection_error = QLabel("")
         
-        self.ip_input = QLineEdit(placeholderText="IP Address", text="127.0.0.1")
+        self.ip_input = QLineEdit(placeholderText="IP Address", text="iamdying.boyne.dev")
         self.port_input = QLineEdit(text="44375", placeholderText="Port")
         self.name_input = QLineEdit(placeholderText="Username", text="Michael")
         self.connect_sock_button = QPushButton("Connect")

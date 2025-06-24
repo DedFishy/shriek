@@ -1,5 +1,4 @@
 import socket
-import sys
 from threading import Thread
 import chars
 import json
@@ -100,6 +99,8 @@ try:
         thread = Thread(target=client_thread, args=(connection, addr))
         client_threads.append(thread)
         thread.start()
+except KeyboardInterrupt:
+    print("Interrupted")
 finally:
     print("CLOSING --- HOLD YOUR HORSES")
     sock.shutdown(0)
