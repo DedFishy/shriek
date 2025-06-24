@@ -1,17 +1,43 @@
 import socket
-
-from PySide6.QtCore import QSize, Qt, Signal, QObject, QRect
-from PySide6.QtGui import QPaintEvent, QPainter, QTextOption, QIcon, QPixmap
-from PySide6.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QDialog, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QStyle, QPushButton, QLabel, QSizePolicy, QFrame, QTextEdit, QStyleOption
+import subprocess
 import sys
+def install(package):
+    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+install("pyside6")
+install("markdown")
+
+from PySide6.QtCore import (
+    Qt, 
+    Signal, 
+    QObject
+)
+from PySide6.QtGui import (
+    QPaintEvent, 
+    QPainter, 
+    QTextOption, 
+    QIcon, 
+    QPixmap
+)
+from PySide6.QtWidgets import (
+    QApplication, 
+    QMainWindow, 
+    QHBoxLayout, 
+    QDialog, 
+    QVBoxLayout, 
+    QWidget, 
+    QLineEdit, 
+    QStyle, 
+    QPushButton, 
+    QLabel, 
+    QSizePolicy, 
+    QTextEdit, 
+    QStyleOption
+)
 import chars
 import json
 from threading import Thread
 import markdown
 import html
-
-import random
-username = "skibidi" + str(random.randint(0, 9999))
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
