@@ -6,6 +6,9 @@ import sys
 import chars
 import json
 from threading import Thread
+import pyaudio
+
+audio = pyaudio.PyAudio()
 
 import random
 username = "skibidi" + str(random.randint(0, 9999))
@@ -13,7 +16,68 @@ username = "skibidi" + str(random.randint(0, 9999))
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 port = 44375
+mic_send_port = 44376
+audio_recv_port = 44377
 buffsize = 1024
+
+FORMAT = pyaudio.paInt16
+CHANNELS = 2
+RATE = 44100
+CHUNK = 1024
+
+class MicrophoneStreamer:
+    def __init__(self):
+        
+        
+        self.streaming = True
+
+        self.frames = []
+    
+    def stream_send_loop(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        while self.streaming:
+            if len(self.frames) > 0:
+                self.socket.sendto(self.frames.pop(0), ("127.0.0.1", mic_send_port))
+
+        self.socket.close()
+
+    def mic_read_loop(self):
+        self.stream = audio.open(RATE, CHANNELS, FORMAT, input=True, frames_per_buffer=CHUNK)
+        while self.streaming:
+            self.frames.append(self.stream.read(CHUNK))
+
+        self.stream.close()
+
+class AudioStreamer:
+    def __init__(self):
+        
+        
+        self.streaming = True
+
+        self.frames = []
+
+        self.BUFFER_SIZE = 10
+    
+    def stream_recv_loop(self):
+        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.socket.bind(("127.0.0.1", audio_recv_port))
+        self.socket.settimeout(1)
+        while self.streaming:
+            try:
+                self.frames.append(self.socket.recv(CHUNK * CHANNELS * 2))
+            except TimeoutError:
+                print("Audio recv timed out.")
+        self.socket.close()
+
+    
+    def audio_play_loop(self):
+        self.stream = audio.open(RATE, CHANNELS, FORMAT, output=True, frames_per_buffer=CHUNK)
+        while self.streaming:
+            if len(self.frames) == self.BUFFER_SIZE:
+                while self.streaming:
+                    if len(self.frames) > 0:
+                        self.stream.write(self.frames.pop(0), CHUNK)
+        self.stream.close()
 
 class Emitter(QObject):
     new_message_signal = Signal(str, str)
@@ -43,7 +107,12 @@ class MessageContent(QLabel):
 
 class Window(QMainWindow):
     def __init__(self):
-        super().__init__()
+        super().__init__() 
+
+        self.mic_streamer = MicrophoneStreamer()
+        self.audio_streamer = AudioStreamer()
+
+        
 
         self.setWindowTitle("Shriek")
 
@@ -57,6 +126,31 @@ class Window(QMainWindow):
         self.emitter.new_message_signal.connect(self.add_message)
 
         self.add_message("sender", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+    def start_call_threads(self):
+        self.mic_streamer.streaming = True
+        self.audio_streamer.streaming = True
+        self.mic_read_thread = Thread(target=self.mic_streamer.mic_read_loop)
+        self.stream_send_thread = Thread(target=self.mic_streamer.stream_send_loop)
+        self.stream_recv_thread = Thread(target=self.audio_streamer.stream_recv_loop)
+        self.audio_play_thread = Thread(target=self.audio_streamer.audio_play_loop)
+
+        self.mic_read_thread.start()
+        self.stream_send_thread.start()
+        self.stream_recv_thread.start()
+        self.audio_play_thread.start()
+    
+    def end_call_threads(self):
+        self.mic_streamer.streaming = False
+        self.audio_streamer.streaming = False
+        print("joining mic")
+        self.mic_read_thread.join()
+        print("joining stream send")
+        self.stream_send_thread.join()
+        print("joining stream recieve")
+        self.stream_recv_thread.join()
+        print("joining audio play")
+        self.audio_play_thread.join()
 
     def handle_message(self, data: dict):
         print(data)
@@ -144,6 +238,7 @@ class Window(QMainWindow):
         ## Phone call indicator
         self.call_indicator_layout = QHBoxLayout()
         self.toggle_call_button = QPushButton("Join Call")
+        self.toggle_call_button.clicked.connect(self.toggle_call)
         self.indicator_text = QLabel("Not connected")
         self.call_indicator_layout.addWidget(self.toggle_call_button)
         self.call_indicator_layout.addWidget(self.indicator_text)
@@ -160,6 +255,9 @@ class Window(QMainWindow):
         self.main_widget = QWidget()
         self.main_widget.setLayout(self.main_layout)
         self.setCentralWidget(self.main_widget)
+    
+    def toggle_call(self):
+        self.start_call_threads()
 
     def remove_users(self):
         for user_list_widget in self.user_list_layout.children():
@@ -179,6 +277,7 @@ app = QApplication(sys.argv)
 window = Window()
 window.show()
 app.exec()
-sock.shutdown(0)
+window.end_call_threads()
+sock.shutdown(socket.SHUT_RDWR)
 window.socket_thread.join()
 sock.close()

@@ -14,6 +14,31 @@ sock = socket.socket()
 
 buffsize = 1024
 
+CHANNELS = 2
+CHUNK = 1024
+
+mic_send_port = 44376
+audio_recv_port = 44377
+
+class UserMicrophoneBroadcaster:
+    def __init__(self):
+        self.incoming = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.incoming.bind(("127.0.0.1", mic_send_port))
+        self.outgoing = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
+        self.streaming = True
+    
+    def stream_recv_loop(self):
+        while self.streaming:
+            print(len(client_threads))
+            data = b""
+            for i in range(len(client_threads)):
+                data_recv = self.incoming.recv(CHUNK*CHANNELS*2)
+                data_recv = data_recv[:len(data_recv)//len(client_threads)]
+                data += data_recv
+
+            self.outgoing.sendto(data, ("127.0.0.1", audio_recv_port))
+            self.outgoing.sendto(data, ("127.0.0.1", audio_recv_port + 5))
+
 def send_data(name, data: dict, client_sock):
     data["type"] = name
     data_text = json.dumps(data).encode("utf-8") + chars.END
@@ -68,6 +93,8 @@ port = 44375
 sock.bind(("0.0.0.0", port))
 
 try:
+    broadcaster = UserMicrophoneBroadcaster()
+    Thread(target=broadcaster.stream_recv_loop).start()
     while True:
         print("Listening for connections...")
         sock.listen(5)  
@@ -79,4 +106,5 @@ try:
         client_threads.append(thread)
         thread.start()
 finally:
+    print("CLOSING --- HOLD YOUR HORSES")
     sock.close()
