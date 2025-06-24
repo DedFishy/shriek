@@ -37,19 +37,12 @@ def handle_message(message: dict, client_sock: socket.socket):
     sid = client_sock.getpeername()
     message_type = message["type"]
     if message_type == "send_message":
-        name = userman.get_user_guaranteed(sid=sid).name
-        send_data("user_message", {"message": message["message"], "from": name}, None)
+        if len(message["message"]) > 0:
+            name = userman.get_user_guaranteed(sid=sid).name
+            send_data("user_message", {"message": message["message"], "from": name}, None)
     elif message_type == "join":
         userman.create_user(message["username"], sid)
         send_room_update()
-    elif message_type == "join_voice":
-        userman.add_to_voice(sid)
-        print("Connecting user to voice")
-        send_data("joined_voice", {}, client_sock)
-    elif message_type == "leave_voice":
-        userman.remove_from_voice(sid)
-        print("Disconnecting user from voice")
-        send_data("left_voice", {}, client_sock)
 
 def client_thread(client_sock: socket.socket, address: tuple):
     clients[address] = client_sock
@@ -82,6 +75,9 @@ def client_thread(client_sock: socket.socket, address: tuple):
     print([user.serialize() for user in userman.users])
     print(address)
     userman.remove_user(userman.get_user(sid=address))
+
+    send_room_update()
+
 
 port = 44375
 

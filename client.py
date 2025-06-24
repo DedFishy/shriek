@@ -1,7 +1,8 @@
 import socket
+
 from PySide6.QtCore import QSize, Qt, Signal, QObject, QRect
-from PySide6.QtGui import QPaintEvent, QPainter, QTextOption
-from PySide6.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QStyle, QPushButton, QLabel, QSizePolicy, QFrame, QTextEdit, QStyleOption
+from PySide6.QtGui import QPaintEvent, QPainter, QTextOption, QIcon, QPixmap
+from PySide6.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QDialog, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QStyle, QPushButton, QLabel, QSizePolicy, QFrame, QTextEdit, QStyleOption
 import sys
 import chars
 import json
@@ -53,12 +54,13 @@ class Window(QMainWindow):
         super().__init__() 
 
         self.setWindowTitle("Shriek")
+        self.setWindowIcon(QIcon("icon.png"))
         self.setGeometry(50, 50, 500, 100)
 
         self.register_widgets()
 
         self.connect_sock()
-        self.send_data("join", {"username": username})
+        self.send_data("join", {"username": self.name_input.text()})
 
         self.emitter = Emitter()
         self.emitter.new_message_signal.connect(self.add_message)
@@ -107,9 +109,50 @@ class Window(QMainWindow):
 
     
     def connect_sock(self):
-        sock.connect(("127.0.0.1", port))
-        self.socket_thread = Thread(target=self.server_thread)
-        self.socket_thread.start()
+        self.connection_dialog = QDialog()
+        self.connection_dialog.setWindowTitle("Connect to Server")
+        self.connection_dialog.setWindowIcon(QIcon("icon.png"))
+
+        connection_dialog_layout = QVBoxLayout()
+        connection_dialog_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
+
+        connection_dialog_image = QLabel()
+        
+        connection_dialog_image.setPixmap(QPixmap("icon.png"))
+        connection_dialog_layout.addWidget(connection_dialog_image, alignment=Qt.AlignmentFlag.AlignCenter)
+
+        connection_dialog_layout.addWidget(QLabel("Put in the information to connect to a server"))
+
+        self.connection_error = QLabel("")
+        
+        self.ip_input = QLineEdit(placeholderText="IP Address", text="127.0.0.1")
+        self.port_input = QLineEdit(text="44375", placeholderText="Port")
+        self.name_input = QLineEdit(placeholderText="Username", text="Michael")
+        self.connect_sock_button = QPushButton("Connect")
+        self.connect_sock_button.clicked.connect(self.connect_sock_callback)
+
+        connection_dialog_layout.addWidget(self.connection_error)
+
+        connection_dialog_layout.addWidget(self.ip_input)
+        connection_dialog_layout.addWidget(self.port_input)
+        connection_dialog_layout.addWidget(self.name_input)
+        connection_dialog_layout.addWidget(self.connect_sock_button)
+
+        self.connection_dialog.setLayout(connection_dialog_layout)
+
+        self.connection_dialog.exec()
+        
+    
+    def connect_sock_callback(self):
+        try:
+            if len(self.name_input.text()) < 3:
+                raise Exception("Username too short")
+            sock.connect((self.ip_input.text(), int(self.port_input.text())))
+            self.socket_thread = Thread(target=self.server_thread)
+            self.socket_thread.start()
+            self.connection_dialog.close()
+        except Exception as e:
+            self.connection_error.setText(str(e))
 
     def send_message(self):
         message = self.message_typing_box.text()
@@ -153,22 +196,12 @@ class Window(QMainWindow):
         self.message_view_layout.addLayout(self.message_typing_container_layout)
 
         # Right side of the screen
-        self.user_list_container_layout = QVBoxLayout()
-
-        ### User list
-        self.user_list_scroll = QScrollArea()
-        self.user_list_scroll.horizontalScrollBar().setVisible(False)
-        self.user_list_layout = QVBoxLayout()
-        
-        self.user_list_widget = QWidget()
-        self.user_list_scroll.setWidget(self.user_list_widget)
-        self.user_list_scroll.setWidgetResizable(True)
-        self.user_list_widget.setLayout(self.user_list_layout)
-        self.user_list_container_layout.addWidget(self.user_list_scroll, 1)
+        self.user_list = QTextEdit()
+        self.user_list.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Preferred)
 
         # Add sublayouts
         self.main_layout.addLayout(self.message_view_layout)
-        self.main_layout.addLayout(self.user_list_container_layout)
+        self.main_layout.addWidget(self.user_list)
 
         self.main_widget = QWidget()
         self.main_widget.setLayout(self.main_layout)
@@ -176,22 +209,16 @@ class Window(QMainWindow):
 
     def remove_users(self):
         print("REMOVING ALL USERS")
-        for i in reversed(range(self.user_list_layout.count())): 
-            self.user_list_layout.itemAt(i).widget().setParent(None)
+        self.user_list.setText("<strong>Connected Users:</strong>")
 
     def add_user(self, name):
-        if self.user_list_stretch != None:
-            self.user_list_layout.removeItem(self.user_list_stretch)
         
-        user_widget = QLabel(name)
-        user_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
-        self.user_list_layout.addWidget(user_widget)
-        self.user_list_layout.addStretch(1)
+        self.user_list.append(name)
 
     def add_message(self, sender, message):
         self.message_list_widget.insertHtml("<br><strong>" + sender + "</strong> ")
         self.message_list_widget.setAutoFormatting(QTextEdit.AutoFormattingFlag.AutoAll)
-        self.message_list_widget.insertPlainText(message)
+        self.message_list_widget.insertHtml(message)
         self.message_list_widget.verticalScrollBar().setValue(self.message_list_widget.maximumHeight())
 
     def room_update(self, data):
