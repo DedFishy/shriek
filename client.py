@@ -1,15 +1,45 @@
 import socket
-from PySide6.QtCore import QSize, Qt
-from PySide6.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QPushButton, QLabel
+from PySide6.QtCore import QSize, Qt, Signal, QObject
+from PySide6.QtGui import QPaintEvent, QPainter, QTextOption
+from PySide6.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QStyle, QPushButton, QLabel, QSizePolicy, QFrame, QTextEdit, QStyleOption
 import sys
 import chars
 import json
+from threading import Thread
+
+import random
+username = "skibidi" + str(random.randint(0, 9999))
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 port = 44375
-
 buffsize = 1024
+
+class Emitter(QObject):
+    new_message_signal = Signal(str, str)
+
+    def new_message(self, sender, message):
+        self.new_message_signal.emit(sender, message)
+
+class MessageContent(QLabel):
+
+    def __init__(self, *args, **kwargs):
+        super(MessageContent, self).__init__(*args, **kwargs)  
+
+        self.textalignment = Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWrapAnywhere
+        self.isTextLabel = True
+        self.align = None
+    
+    def paintEvent(self, event: QPaintEvent) -> None:
+        opt = QStyleOption()
+        opt.initFrom(self)
+        painter = QPainter(self)
+
+        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, opt, painter, self)
+
+        self.style().drawItemText(painter, self.rect(),
+                                  self.textalignment, self.palette(), True, self.text())
+
 
 class Window(QMainWindow):
     def __init__(self):
@@ -17,21 +47,65 @@ class Window(QMainWindow):
 
         self.setWindowTitle("Shriek")
 
+
         self.register_widgets()
 
         self.connect_sock()
+        self.send_data("join", {"username": username})
+
+        self.emitter = Emitter()
+        self.emitter.new_message_signal.connect(self.add_message)
+
+        self.add_message("sender", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+    def handle_message(self, data: dict):
+        print(data)
+        name = data["type"]
+        if name == "user_message":
+            self.emitter.new_message(data["from"], data["message"])
+
+    def server_thread(self):
+        while True:
+            disconnected = False
+            got_to_end = False
+            data = b""
+            while not got_to_end:
+                print("RECV")
+                message = sock.recv(buffsize)
+
+                print(message)
+                data += message
+
+                if not message: 
+                    disconnected = True
+                    break
+
+                if data.endswith(chars.END): got_to_end = True
+            
+            data = data.removesuffix(chars.END)
+            print("server says", data)
+            
+            if disconnected: break
+
+            self.handle_message(json.loads(data))
+            
+        sock.close()
+
     
     def connect_sock(self):
         sock.connect(("127.0.0.1", port))
+        self.socket_thread = Thread(target=self.server_thread)
+        self.socket_thread.start()
 
     def send_message(self):
         message = self.message_typing_box.text()
         self.message_typing_box.setText("")
-        self.send_data({
+        self.send_data("send_message", {
             "message": message
         })
 
-    def send_data(self, data: dict):
+    def send_data(self, name, data: dict):
+        data["type"] = name
         data_text = json.dumps(data).encode("utf-8") + chars.END
         sock.send(data_text)
     
@@ -42,11 +116,14 @@ class Window(QMainWindow):
         self.message_view_layout = QVBoxLayout()
         
         ## Message list
-        self.message_list_scroll_area = QScrollArea()
-        self.message_list_layout = QVBoxLayout()
-        self.message_list_widget = QWidget()
-        self.message_list_widget.setLayout(self.message_list_layout)
-        self.message_list_scroll_area.setWidget(self.message_list_widget)
+        self.message_list_widget = QTextEdit()
+        self.message_list_widget.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
+        self.message_list_widget.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
+        self.message_list_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Maximum)
+        self.message_list_widget.setReadOnly(True)
+
+        self.message_list_widget.insertPlainText("Welcome to the chat room.")
+        
 
         ## Typing area
         self.message_typing_container_layout = QHBoxLayout()
@@ -58,7 +135,7 @@ class Window(QMainWindow):
         self.message_typing_container_layout.addWidget(self.message_send_button)
         
         ### Add to left side of the screen
-        self.message_view_layout.addWidget(self.message_list_widget)
+        self.message_view_layout.addWidget(self.message_list_widget, 1)
         self.message_view_layout.addLayout(self.message_typing_container_layout)
 
         # Right side of the screen
@@ -92,9 +169,16 @@ class Window(QMainWindow):
         user_widget = QLabel(name)
         self.user_list_layout.addWidget(user_widget)
 
+    def add_message(self, sender, message):
+        self.message_list_widget.insertHtml("<br><strong>" + sender + "</strong> ")
+        self.message_list_widget.setAutoFormatting(QTextEdit.AutoFormattingFlag.AutoAll)
+        self.message_list_widget.insertPlainText(message)
+        self.message_list_widget.verticalScrollBar().setValue(self.message_list_widget.maximumHeight())
+
 app = QApplication(sys.argv)
 window = Window()
 window.show()
 app.exec()
-
+sock.shutdown(0)
+window.socket_thread.join()
 sock.close()
