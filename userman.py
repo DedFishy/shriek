@@ -41,6 +41,7 @@ class UserManager:
             print("Invalid user")
             return
         del self.users[self.users.index(user)]
+        user.call_participant_id = -1
 
     def get_next_call_participant_id(self) -> int:
         i = 0
@@ -56,6 +57,7 @@ class UserManager:
 
     def add_to_voice(self, sid: tuple):
         self.voice_excluded_sids.remove(sid)
+        self.get_user(sid=sid).call_participant_id = self.get_next_call_participant_id()
     
     def remove_from_voice(self, sid: tuple):
         self.voice_excluded_sids.append(sid)

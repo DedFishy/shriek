@@ -7,6 +7,7 @@ import chars
 import json
 from threading import Thread
 import pyaudio
+import numpy as np
 
 audio = pyaudio.PyAudio()
 
@@ -17,7 +18,7 @@ sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 port = 44375
 mic_send_port = 44376
-audio_recv_port = 44377+5
+audio_recv_port = 44377
 buffsize = 1024
 
 FORMAT = pyaudio.paInt16
@@ -54,7 +55,9 @@ class AudioStreamer:
         
         self.streaming = True
 
-        self.frames = []
+        self.per_user_frames: dict[int, list] = {}
+
+        
 
         self.BUFFER_SIZE = 10
     
@@ -64,7 +67,12 @@ class AudioStreamer:
         self.socket.settimeout(1)
         while self.streaming:
             try:
-                self.frames.append(self.socket.recv(CHUNK * CHANNELS * 2))
+                frame = self.socket.recv(CHUNK * CHANNELS * 2)
+                frame_uid = int.from_bytes(frame[:1])
+                frame_data = frame[2:]
+                if not frame_uid in self.per_user_frames.keys():
+                    self.per_user_frames[frame_uid] = []
+                self.per_user_frames[frame_uid].append(frame_data)
             except TimeoutError:
                 print("Audio recv timed out.")
         self.socket.close()
@@ -73,10 +81,24 @@ class AudioStreamer:
     def audio_play_loop(self):
         self.stream = audio.open(RATE, CHANNELS, FORMAT, output=True, frames_per_buffer=CHUNK)
         while self.streaming:
-            if len(self.frames) == self.BUFFER_SIZE:
-                while self.streaming:
-                    if len(self.frames) > 0:
-                        self.stream.write(self.frames.pop(0), CHUNK)
+            self.frames_to_merge = []
+            for frames in self.per_user_frames.values():
+                if len(frames) > self.BUFFER_SIZE:
+                    self.frames_to_merge.append(frames.pop(0))
+
+            frame_buffers = []
+            for frame in self.frames_to_merge:
+                frame_buffers.append(np.frombuffer(frame, dtype=np.int16))
+            final_frame = frame_buffers[0] if len(frame_buffers) != 0 else None
+
+            if final_frame is not None:
+                
+                for frame in frame_buffers[1:]:
+                    final_frame[:] += frame
+                
+                clipped = np.clip(final_frame, -32768, 32768)
+
+                self.stream.write(clipped, CHUNK)
         self.stream.close()
 
 class Emitter(QObject):

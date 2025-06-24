@@ -18,7 +18,7 @@ CHANNELS = 2
 CHUNK = 512
 
 mic_send_port = 44376
-audio_recv_port = 44377+5
+audio_recv_port = 44377
 
 class UserMicrophoneBroadcaster:
     def __init__(self):
@@ -29,17 +29,19 @@ class UserMicrophoneBroadcaster:
 
     def stream_recv_loop(self):
         while self.streaming:
-            num_splits = len(userman.users)-len(userman.voice_excluded_sids)
-            data = b""
-            for _ in range(num_splits):
-                data_recv = self.incoming.recv(CHUNK*CHANNELS*2)
-                data_recv = data_recv[:len(data_recv)//num_splits]
-                data += data_recv
+            data_recv, address = self.incoming.recvfrom(CHUNK*CHANNELS*2)
+            cpid = userman.get_user_guaranteed(sid=address).call_participant_id
+            data = int.to_bytes(cpid) + data_recv
 
             for user in userman.users:
+                
+                offset = 0
+
                 if user.sid not in userman.voice_excluded_sids:
-                    self.outgoing.sendto(data, ("127.0.0.1", audio_recv_port))
-                    self.outgoing.sendto(data, ("127.0.0.1", audio_recv_port + 5))
+                    print("Broadcasting to user:" + str(user.serialize()))
+                    print(audio_recv_port + offset)
+                    self.outgoing.sendto(data, (user.sid[0], audio_recv_port + offset))
+                    offset += 5
 
 def send_data(name, data: dict, client_sock: socket.socket|None):
     data["type"] = name
