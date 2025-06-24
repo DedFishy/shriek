@@ -23,7 +23,7 @@ buffsize = 1024
 FORMAT = pyaudio.paInt16
 CHANNELS = 2
 RATE = 44100
-CHUNK = 1024
+CHUNK = 512
 
 class MicrophoneStreamer:
     def __init__(self):
@@ -81,9 +81,13 @@ class AudioStreamer:
 
 class Emitter(QObject):
     new_message_signal = Signal(str, str)
+    room_update_signal = Signal(dict)
 
     def new_message(self, sender, message):
         self.new_message_signal.emit(sender, message)
+
+    def room_update(self, data):
+        self.room_update_signal.emit(data)
 
 class MessageContent(QLabel):
 
@@ -112,8 +116,6 @@ class Window(QMainWindow):
         self.mic_streamer = MicrophoneStreamer()
         self.audio_streamer = AudioStreamer()
 
-        
-
         self.setWindowTitle("Shriek")
 
 
@@ -124,8 +126,11 @@ class Window(QMainWindow):
 
         self.emitter = Emitter()
         self.emitter.new_message_signal.connect(self.add_message)
+        self.emitter.room_update_signal.connect(self.room_update)
 
         self.add_message("sender", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
+
+        self.user_list_stretch = None
 
     def start_call_threads(self):
         self.mic_streamer.streaming = True
@@ -157,6 +162,8 @@ class Window(QMainWindow):
         name = data["type"]
         if name == "user_message":
             self.emitter.new_message(data["from"], data["message"])
+        elif name == "room_update":
+            self.emitter.room_update(data)
 
     def server_thread(self):
         while True:
@@ -213,7 +220,7 @@ class Window(QMainWindow):
         self.message_list_widget = QTextEdit()
         self.message_list_widget.setLineWrapMode(QTextEdit.LineWrapMode.WidgetWidth)
         self.message_list_widget.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
-        self.message_list_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Maximum)
+        self.message_list_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         self.message_list_widget.setReadOnly(True)
 
         self.message_list_widget.insertPlainText("Welcome to the chat room.")
@@ -245,8 +252,14 @@ class Window(QMainWindow):
         self.user_list_container_layout.addLayout(self.call_indicator_layout)
 
         ### User list
+        self.user_list_scroll = QScrollArea()
         self.user_list_layout = QVBoxLayout()
-        self.user_list_container_layout.addLayout(self.user_list_layout, 1)
+        
+        self.user_list_widget = QWidget()
+        self.user_list_scroll.setWidget(self.user_list_widget)
+        self.user_list_scroll.setWidgetResizable(True)
+        self.user_list_widget.setLayout(self.user_list_layout)
+        self.user_list_container_layout.addWidget(self.user_list_scroll, 1)
 
         # Add sublayouts
         self.main_layout.addLayout(self.message_view_layout)
@@ -264,14 +277,24 @@ class Window(QMainWindow):
             user_list_widget.deleteLater()
 
     def add_user(self, name):
+        if self.user_list_stretch != None:
+            self.user_list_layout.removeItem(self.user_list_stretch)
+        
         user_widget = QLabel(name)
+        user_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Minimum)
         self.user_list_layout.addWidget(user_widget)
+        self.user_list_layout.addStretch(1)
 
     def add_message(self, sender, message):
         self.message_list_widget.insertHtml("<br><strong>" + sender + "</strong> ")
         self.message_list_widget.setAutoFormatting(QTextEdit.AutoFormattingFlag.AutoAll)
         self.message_list_widget.insertPlainText(message)
         self.message_list_widget.verticalScrollBar().setValue(self.message_list_widget.maximumHeight())
+
+    def room_update(self, data):
+        print(data)
+        for user in data["user_list"]:
+            self.add_user(user["name"])
 
 app = QApplication(sys.argv)
 window = Window()

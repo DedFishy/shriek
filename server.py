@@ -15,7 +15,7 @@ sock = socket.socket()
 buffsize = 1024
 
 CHANNELS = 2
-CHUNK = 1024
+CHUNK = 512
 
 mic_send_port = 44376
 audio_recv_port = 44377
@@ -47,8 +47,8 @@ def send_data(name, data: dict, client_sock):
 
 def send_room_update(client_sock):
     send_data("room_update", {
-
-    }, client_sock)
+        "user_list": userman.construct_user_list()
+        }, client_sock)
 
 def handle_message(message: dict, client_sock: socket.socket):
     print("Handling", message)
