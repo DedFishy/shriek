@@ -1,37 +1,36 @@
 import socket
 import subprocess
 import sys
-def install(package):
-    subprocess.check_call([sys.executable, "-m", "pip", "install", package])
+
+def install(package: str):
+    with open("log.txt", "w+") as file:
+        subprocess.check_call([sys.executable, "-m", "pip", "install", package], stdout=file)
+
 install("pyside6")
 install("markdown")
 
 from PySide6.QtCore import (
-    Qt, 
-    Signal, 
+    Qt,
+    Signal,
     QObject
 )
 from PySide6.QtGui import (
-    QPaintEvent, 
-    QPainter, 
-    QTextOption, 
-    QIcon, 
+    QTextOption,
+    QIcon,
     QPixmap
 )
 from PySide6.QtWidgets import (
-    QApplication, 
-    QMainWindow, 
-    QHBoxLayout, 
-    QDialog, 
-    QVBoxLayout, 
-    QWidget, 
-    QLineEdit, 
-    QStyle, 
-    QPushButton, 
-    QLabel, 
-    QSizePolicy, 
-    QTextEdit, 
-    QStyleOption
+    QApplication,
+    QMainWindow,
+    QHBoxLayout,
+    QDialog,
+    QVBoxLayout,
+    QWidget,
+    QLineEdit,
+    QPushButton,
+    QLabel,
+    QSizePolicy,
+    QTextEdit,
 )
 import chars
 import json
@@ -48,98 +47,75 @@ class Emitter(QObject):
     new_message_signal = Signal(str, str)
     room_update_signal = Signal(dict)
 
-    def new_message(self, sender, message):
+    def new_message(self, sender: str, message: str):
         self.new_message_signal.emit(sender, message)
 
-    def room_update(self, data):
+    def room_update(self, data: dict):
         self.room_update_signal.emit(data)
 
-class MessageContent(QLabel):
-
-    def __init__(self, *args, **kwargs):
-        super(MessageContent, self).__init__(*args, **kwargs)  
-
-        self.textalignment = Qt.AlignmentFlag.AlignLeft | Qt.TextFlag.TextWrapAnywhere
-        self.isTextLabel = True
-        self.align = None
-    
-    def paintEvent(self, event: QPaintEvent) -> None:
-        opt = QStyleOption()
-        opt.initFrom(self)
-        painter = QPainter(self)
-
-        self.style().drawPrimitive(QStyle.PrimitiveElement.PE_Widget, opt, painter, self)
-
-        self.style().drawItemText(painter, self.rect(),
-                                  self.textalignment, self.palette(), True, self.text())
-
-
 class Window(QMainWindow):
-    waiting_for_voice = False
+    waiting_for_voice: bool = False
+    socket_thread = None
 
     def __init__(self):
         super().__init__() 
 
-        
+        # Setup window
         self.setWindowIcon(QIcon("icon.png"))
         self.setGeometry(50, 50, 500, 100)
 
+        # Create widgets
         self.register_widgets()
 
+        # Start up socket
         self.connect_sock()
         self.send_data("join", {"username": self.name_input.text()})
 
+        # Setup Qt Emitters (for multithreading)
         self.emitter = Emitter()
         self.emitter.new_message_signal.connect(self.add_message)
         self.emitter.room_update_signal.connect(self.room_update)
 
+        # Setup window title
         self.setWindowTitle("Shriek - Connected to " + self.ip_input.text() + " as " + self.name_input.text())
 
-        self.user_list_stretch = None
-
-        self.in_call = False
-
-    
-
     def handle_message(self, data: dict):
-        print(data)
-        name = data["type"]
+        name = data["type"] # What type of message this is
         if name == "user_message":
             self.emitter.new_message(data["from"], data["message"])
         elif name == "system_message":
             self.emitter.new_message("System", data["message"])
         elif name == "room_update":
             self.emitter.room_update(data)
+        elif name == "join_deny":
+            self.connection_error.setText(data["message"])
+            self.connection_dialog.open()
 
     def server_thread(self):
         while True:
             disconnected = False
             got_to_end = False
             data = b""
+            # While data is still available
+            
             while not got_to_end:
-                print("RECV")
                 message = sock.recv(buffsize)
-
-                print(message)
                 data += message
 
-                if not message: 
+                if not message: # Connection has closed
                     disconnected = True
                     break
 
                 if data.endswith(chars.END): got_to_end = True
             
             data = data.removesuffix(chars.END)
-            print("server says", data)
-            
             if disconnected: break
-
             self.handle_message(json.loads(data))
-            
+        
         sock.close()
-
     
     def connect_sock(self):
+        # Setup dialog
         self.connection_dialog = QDialog()
         self.connection_dialog.setWindowTitle("Connect to Server")
         self.connection_dialog.setWindowIcon(QIcon("icon.png"))
@@ -147,41 +123,54 @@ class Window(QMainWindow):
         connection_dialog_layout = QVBoxLayout()
         connection_dialog_layout.setAlignment(Qt.AlignmentFlag.AlignCenter)
 
+        # Setup title image
         connection_dialog_image = QLabel()
-        
         connection_dialog_image.setPixmap(QPixmap("icon.png"))
         connection_dialog_layout.addWidget(connection_dialog_image, alignment=Qt.AlignmentFlag.AlignCenter)
 
+        # Setup instructions
         connection_dialog_layout.addWidget(QLabel("Put in the information to connect to a server"))
 
+        # Setup error message label
         self.connection_error = QLabel("")
+
+        connection_dialog_layout.addWidget(self.connection_error)
         
+        # Setup inputs
         self.ip_input = QLineEdit(placeholderText="IP Address", text="iamdying.boyne.dev")
         self.port_input = QLineEdit(text="44375", placeholderText="Port")
         self.name_input = QLineEdit(placeholderText="Username", text="Michael")
         self.connect_sock_button = QPushButton("Connect")
         self.connect_sock_button.clicked.connect(self.connect_sock_callback)
 
-        connection_dialog_layout.addWidget(self.connection_error)
-
         connection_dialog_layout.addWidget(self.ip_input)
         connection_dialog_layout.addWidget(self.port_input)
         connection_dialog_layout.addWidget(self.name_input)
         connection_dialog_layout.addWidget(self.connect_sock_button)
 
+        # Register layout
         self.connection_dialog.setLayout(connection_dialog_layout)
 
+        # Setup and start view
+        self.connection_dialog.setFixedSize(300, 275)
         self.connection_dialog.exec()
-        
     
     def connect_sock_callback(self):
         try:
+            # Validate input
             if len(self.name_input.text()) < 3:
                 raise Exception("Username too short")
+            
+            
+            # Connect to server
             sock.connect((self.ip_input.text(), int(self.port_input.text())))
+
+            self.connection_dialog.close()
+
+            # Start server thread
             self.socket_thread = Thread(target=self.server_thread)
             self.socket_thread.start()
-            self.connection_dialog.close()
+
         except Exception as e:
             self.connection_error.setText(str(e))
 
@@ -192,10 +181,13 @@ class Window(QMainWindow):
             "message": message
         })
 
-    def send_data(self, name, data: dict):
+    def send_data(self, name: str, data: dict):
         data["type"] = name
         data_text = json.dumps(data).encode("utf-8") + chars.END
-        sock.send(data_text)
+        try:
+            sock.send(data_text)
+        except BrokenPipeError:
+            raise SystemExit()
     
     def register_widgets(self):
         self.main_layout = QHBoxLayout()
@@ -209,7 +201,6 @@ class Window(QMainWindow):
         self.message_list_widget.setWordWrapMode(QTextOption.WrapMode.WrapAnywhere)
         self.message_list_widget.setSizePolicy(QSizePolicy.Policy.Minimum, QSizePolicy.Policy.Expanding)
         self.message_list_widget.setReadOnly(True)
-
         self.message_list_widget.insertPlainText("Welcome to the chat room.")
         
 
@@ -234,34 +225,33 @@ class Window(QMainWindow):
         self.main_layout.addLayout(self.message_view_layout)
         self.main_layout.addWidget(self.user_list)
 
+        # Main Widget!
         self.main_widget = QWidget()
         self.main_widget.setLayout(self.main_layout)
         self.setCentralWidget(self.main_widget)
 
     def remove_users(self):
-        print("REMOVING ALL USERS")
         self.user_list.setText("<strong>Connected Users:</strong>")
 
-    def add_user(self, name):
-        
+    def add_user(self, name: str):
         self.user_list.append(name)
 
-    def add_message(self, sender, message):
+    def add_message(self, sender: str, message: str):
         self.message_list_widget.insertHtml("<br><strong>" + sender + "</strong> ")
         self.message_list_widget.setAutoFormatting(QTextEdit.AutoFormattingFlag.AutoAll)
         self.message_list_widget.insertHtml(markdown.markdown(html.escape(message)))
         self.message_list_widget.verticalScrollBar().setValue(self.message_list_widget.maximumHeight())
 
-    def room_update(self, data):
-        print(data)
+    def room_update(self, data: dict):
         self.remove_users()
         for user in data["user_list"]:
             self.add_user(user["name"])
 
-app = QApplication(sys.argv)
-window = Window()
-window.show()
-app.exec()
-sock.shutdown(socket.SHUT_RDWR)
-window.socket_thread.join()
-sock.close()
+if __name__ == "__main__":
+    app = QApplication(sys.argv)
+    window = Window()
+    window.show()
+    app.exec()
+    sock.shutdown(socket.SHUT_RDWR)
+    window.socket_thread.join()
+    sock.close()
