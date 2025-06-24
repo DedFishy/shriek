@@ -17,32 +17,6 @@ buffsize = 1024
 CHANNELS = 2
 CHUNK = 512
 
-mic_send_port = 44376
-audio_recv_port = 44377
-
-class UserMicrophoneBroadcaster:
-    def __init__(self):
-        self.incoming = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.incoming.bind(("127.0.0.1", mic_send_port))
-        self.outgoing = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.streaming = True
-
-    def stream_recv_loop(self):
-        while self.streaming:
-            data_recv, address = self.incoming.recvfrom(CHUNK*CHANNELS*2)
-            cpid = userman.get_user_guaranteed(sid=address).call_participant_id
-            data = int.to_bytes(cpid) + data_recv
-
-            for user in userman.users:
-                
-                offset = 0
-
-                if user.sid not in userman.voice_excluded_sids:
-                    print("Broadcasting to user:" + str(user.serialize()))
-                    print(audio_recv_port + offset)
-                    self.outgoing.sendto(data, (user.sid[0], audio_recv_port + offset))
-                    offset += 5
-
 def send_data(name, data: dict, client_sock: socket.socket|None):
     data["type"] = name
     data_text = json.dumps(data).encode("utf-8") + chars.END
@@ -114,8 +88,6 @@ port = 44375
 sock.bind(("0.0.0.0", port))
 
 try:
-    broadcaster = UserMicrophoneBroadcaster()
-    Thread(target=broadcaster.stream_recv_loop).start()
     while True:
         print("Listening for connections...")
         sock.listen(5)  

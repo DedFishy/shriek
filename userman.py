@@ -2,13 +2,11 @@ class User:
     def __init__(self, name, sid):
         self.name = name
         self.sid = sid
-        self.call_participant_id = -1
 
     def serialize(self):
         return {
             "name": self.name,
-            "sid": self.sid,
-            "call_participant_id": self.call_participant_id
+            "sid": self.sid
         }
 
 class UserManager:
@@ -41,23 +39,10 @@ class UserManager:
             print("Invalid user")
             return
         del self.users[self.users.index(user)]
-        user.call_participant_id = -1
 
-    def get_next_call_participant_id(self) -> int:
-        i = 0
-        
-        while True:
-            found = True
-            for user in self.users:
-                if user.call_participant_id == i:
-                    found = False
-                    break
-            if found: return i
-            i+=1
 
     def add_to_voice(self, sid: tuple):
         self.voice_excluded_sids.remove(sid)
-        self.get_user(sid=sid).call_participant_id = self.get_next_call_participant_id()
     
     def remove_from_voice(self, sid: tuple):
         self.voice_excluded_sids.append(sid)

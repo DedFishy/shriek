@@ -6,10 +6,7 @@ import sys
 import chars
 import json
 from threading import Thread
-import pyaudio
 import numpy as np
-
-audio = pyaudio.PyAudio()
 
 import random
 username = "skibidi" + str(random.randint(0, 9999))
@@ -17,89 +14,7 @@ username = "skibidi" + str(random.randint(0, 9999))
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
 port = 44375
-mic_send_port = 44376
-audio_recv_port = 44377
 buffsize = 1024
-
-FORMAT = pyaudio.paInt16
-CHANNELS = 2
-RATE = 44100
-CHUNK = 512
-
-class MicrophoneStreamer:
-    def __init__(self):
-        
-        
-        self.streaming = True
-
-        self.frames = []
-    
-    def stream_send_loop(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        while self.streaming:
-            if len(self.frames) > 0:
-                self.socket.sendto(self.frames.pop(0), ("127.0.0.1", mic_send_port))
-
-        self.socket.close()
-
-    def mic_read_loop(self):
-        self.stream = audio.open(RATE, CHANNELS, FORMAT, input=True, frames_per_buffer=CHUNK)
-        while self.streaming:
-            self.frames.append(self.stream.read(CHUNK))
-
-        self.stream.close()
-
-class AudioStreamer:
-    def __init__(self):
-        
-        
-        self.streaming = True
-
-        self.per_user_frames: dict[int, list] = {}
-
-        
-
-        self.BUFFER_SIZE = 10
-    
-    def stream_recv_loop(self):
-        self.socket = socket.socket(socket.AF_INET, socket.SOCK_DGRAM)
-        self.socket.bind(("127.0.0.1", audio_recv_port))
-        self.socket.settimeout(1)
-        while self.streaming:
-            try:
-                frame = self.socket.recv(CHUNK * CHANNELS * 2)
-                frame_uid = int.from_bytes(frame[:1])
-                frame_data = frame[2:]
-                if not frame_uid in self.per_user_frames.keys():
-                    self.per_user_frames[frame_uid] = []
-                self.per_user_frames[frame_uid].append(frame_data)
-            except TimeoutError:
-                print("Audio recv timed out.")
-        self.socket.close()
-
-    
-    def audio_play_loop(self):
-        self.stream = audio.open(RATE, CHANNELS, FORMAT, output=True, frames_per_buffer=CHUNK)
-        while self.streaming:
-            self.frames_to_merge = []
-            for frames in self.per_user_frames.values():
-                if len(frames) > self.BUFFER_SIZE:
-                    self.frames_to_merge.append(frames.pop(0))
-
-            frame_buffers = []
-            for frame in self.frames_to_merge:
-                frame_buffers.append(np.frombuffer(frame, dtype=np.int16))
-            final_frame = frame_buffers[0] if len(frame_buffers) != 0 else None
-
-            if final_frame is not None:
-                
-                for frame in frame_buffers[1:]:
-                    final_frame[:] += frame
-                
-                clipped = np.clip(final_frame, -32768, 32768)
-
-                self.stream.write(clipped, CHUNK)
-        self.stream.close()
 
 class Emitter(QObject):
     new_message_signal = Signal(str, str)
@@ -137,9 +52,6 @@ class Window(QMainWindow):
     def __init__(self):
         super().__init__() 
 
-        self.mic_streamer = MicrophoneStreamer()
-        self.audio_streamer = AudioStreamer()
-
         self.setWindowTitle("Shriek")
         self.setGeometry(50, 50, 500, 100)
 
@@ -156,41 +68,7 @@ class Window(QMainWindow):
 
         self.in_call = False
 
-    def start_call_threads(self):
-        if self.in_call: return
-        self.waiting_for_voice = True
-        self.send_data("join_voice", {})
-        while self.waiting_for_voice: pass
-        self.in_call = True
-        self.mic_streamer.streaming = True
-        self.audio_streamer.streaming = True
-        self.mic_read_thread = Thread(target=self.mic_streamer.mic_read_loop)
-        self.stream_send_thread = Thread(target=self.mic_streamer.stream_send_loop)
-        self.stream_recv_thread = Thread(target=self.audio_streamer.stream_recv_loop)
-        self.audio_play_thread = Thread(target=self.audio_streamer.audio_play_loop)
-
-        self.mic_read_thread.start()
-        self.stream_send_thread.start()
-        self.stream_recv_thread.start()
-        self.audio_play_thread.start()
     
-    def end_call_threads(self):
-        
-        if not self.in_call: return
-        self.waiting_for_voice = True
-        self.send_data("leave_voice", {})
-        while self.waiting_for_voice: pass
-        self.in_call = False
-        self.mic_streamer.streaming = False
-        self.audio_streamer.streaming = False
-        print("joining mic")
-        self.mic_read_thread.join()
-        print("joining stream send")
-        self.stream_send_thread.join()
-        print("joining stream recieve")
-        self.stream_recv_thread.join()
-        print("joining audio play")
-        self.audio_play_thread.join()
 
     def handle_message(self, data: dict):
         print(data)
@@ -199,8 +77,6 @@ class Window(QMainWindow):
             self.emitter.new_message(data["from"], data["message"])
         elif name == "room_update":
             self.emitter.room_update(data)
-        elif name in ["joined_voice", "left_voice"]:
-            self.waiting_for_voice = False
 
     def server_thread(self):
         while True:
@@ -279,13 +155,6 @@ class Window(QMainWindow):
         # Right side of the screen
         self.user_list_container_layout = QVBoxLayout()
 
-        ## Phone call indicator
-        self.call_indicator_layout = QHBoxLayout()
-        self.toggle_call_button = QPushButton("Join Call")
-        self.toggle_call_button.clicked.connect(self.toggle_call)
-        self.call_indicator_layout.addWidget(self.toggle_call_button)
-        self.user_list_container_layout.addLayout(self.call_indicator_layout)
-
         ### User list
         self.user_list_scroll = QScrollArea()
         self.user_list_scroll.horizontalScrollBar().setVisible(False)
@@ -304,24 +173,11 @@ class Window(QMainWindow):
         self.main_widget = QWidget()
         self.main_widget.setLayout(self.main_layout)
         self.setCentralWidget(self.main_widget)
-    
-    def toggle_call(self):
-        if not self.in_call:
-            self.toggle_call_button.setText("Leave Call")
-            self.toggle_call_button.setEnabled(False)
-            self.start_call_threads()
-            self.toggle_call_button.setEnabled(True)
-        else:
-            self.toggle_call_button.setText("Join Call")
-            self.toggle_call_button.setEnabled(False)
-            self.end_call_threads()
-            self.toggle_call_button.setEnabled(True)
 
     def remove_users(self):
         print("REMOVING ALL USERS")
-        for user_list_widget in self.user_list_layout.children():
-            print(user_list_widget)
-            user_list_widget.deleteLater()
+        for i in reversed(range(self.user_list_layout.count())): 
+            self.user_list_layout.itemAt(i).widget().setParent(None)
 
     def add_user(self, name):
         if self.user_list_stretch != None:
@@ -348,7 +204,6 @@ app = QApplication(sys.argv)
 window = Window()
 window.show()
 app.exec()
-window.end_call_threads()
 sock.shutdown(socket.SHUT_RDWR)
 window.socket_thread.join()
 sock.close()
