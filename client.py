@@ -106,6 +106,8 @@ class Window(QMainWindow):
         name = data["type"]
         if name == "user_message":
             self.emitter.new_message(data["from"], data["message"])
+        elif name == "system_message":
+            self.emitter.new_message("System", data["message"])
         elif name == "room_update":
             self.emitter.room_update(data)
 

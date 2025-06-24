@@ -45,6 +45,7 @@ def handle_message(message: dict, client_sock: socket.socket):
     elif message_type == "join":
         userman.create_user(message["username"], sid)
         send_room_update()
+        send_data("system_message", {"message": message["username"] + " has entered the chat."}, None)
 
 def client_thread(client_sock: socket.socket, address: tuple):
     clients[address] = client_sock
@@ -76,9 +77,12 @@ def client_thread(client_sock: socket.socket, address: tuple):
     del clients[address]
     print([user.serialize() for user in userman.users])
     print(address)
-    userman.remove_user(userman.get_user(sid=address))
+    user = userman.get_user_guaranteed(sid=address)
+    send_data("system_message", {"message": user.name + " has left the chat."}, None)
+    userman.remove_user(user)
 
     send_room_update()
+    
 
 
 
