@@ -1,5 +1,5 @@
 import socket
-from PySide6.QtCore import QSize, Qt, Signal, QObject
+from PySide6.QtCore import QSize, Qt, Signal, QObject, QRect
 from PySide6.QtGui import QPaintEvent, QPainter, QTextOption
 from PySide6.QtWidgets import QApplication, QMainWindow, QHBoxLayout, QVBoxLayout, QWidget, QScrollArea, QLineEdit, QStyle, QPushButton, QLabel, QSizePolicy, QFrame, QTextEdit, QStyleOption
 import sys
@@ -117,7 +117,7 @@ class Window(QMainWindow):
         self.audio_streamer = AudioStreamer()
 
         self.setWindowTitle("Shriek")
-
+        self.setGeometry(50, 50, 500, 100)
 
         self.register_widgets()
 
@@ -128,11 +128,12 @@ class Window(QMainWindow):
         self.emitter.new_message_signal.connect(self.add_message)
         self.emitter.room_update_signal.connect(self.room_update)
 
-        self.add_message("sender", "aaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaaa")
-
         self.user_list_stretch = None
 
+        self.in_call = False
+
     def start_call_threads(self):
+        self.in_call = True
         self.mic_streamer.streaming = True
         self.audio_streamer.streaming = True
         self.mic_read_thread = Thread(target=self.mic_streamer.mic_read_loop)
@@ -146,6 +147,8 @@ class Window(QMainWindow):
         self.audio_play_thread.start()
     
     def end_call_threads(self):
+        if not self.in_call: return
+        self.in_call = False
         self.mic_streamer.streaming = False
         self.audio_streamer.streaming = False
         print("joining mic")
@@ -246,13 +249,12 @@ class Window(QMainWindow):
         self.call_indicator_layout = QHBoxLayout()
         self.toggle_call_button = QPushButton("Join Call")
         self.toggle_call_button.clicked.connect(self.toggle_call)
-        self.indicator_text = QLabel("Not connected")
         self.call_indicator_layout.addWidget(self.toggle_call_button)
-        self.call_indicator_layout.addWidget(self.indicator_text)
         self.user_list_container_layout.addLayout(self.call_indicator_layout)
 
         ### User list
         self.user_list_scroll = QScrollArea()
+        self.user_list_scroll.horizontalScrollBar().setVisible(False)
         self.user_list_layout = QVBoxLayout()
         
         self.user_list_widget = QWidget()
@@ -270,7 +272,16 @@ class Window(QMainWindow):
         self.setCentralWidget(self.main_widget)
     
     def toggle_call(self):
-        self.start_call_threads()
+        if not self.in_call:
+            self.toggle_call_button.setText("Leave Call")
+            self.toggle_call_button.setEnabled(False)
+            self.start_call_threads()
+            self.toggle_call_button.setEnabled(True)
+        else:
+            self.toggle_call_button.setText("Join Call")
+            self.toggle_call_button.setEnabled(False)
+            self.end_call_threads()
+            self.toggle_call_button.setEnabled(True)
 
     def remove_users(self):
         for user_list_widget in self.user_list_layout.children():

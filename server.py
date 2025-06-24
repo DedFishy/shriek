@@ -107,4 +107,5 @@ try:
         thread.start()
 finally:
     print("CLOSING --- HOLD YOUR HORSES")
+    sock.shutdown(0)
     sock.close()
