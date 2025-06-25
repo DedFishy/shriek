@@ -56,6 +56,7 @@ class Emitter(QObject):
 class Window(QMainWindow):
     waiting_for_voice: bool = False
     socket_thread = None
+    is_connected = False
 
     def __init__(self):
         super().__init__() 
@@ -67,14 +68,18 @@ class Window(QMainWindow):
         # Create widgets
         self.register_widgets()
 
-        # Start up socket
-        self.connect_sock()
-        self.send_data("join", {"username": self.name_input.text()})
+        
+        
 
         # Setup Qt Emitters (for multithreading)
         self.emitter = Emitter()
         self.emitter.new_message_signal.connect(self.add_message)
         self.emitter.room_update_signal.connect(self.room_update)
+
+        self.hide()
+
+        # Start up socket
+        self.connect_sock()
 
         # Setup window title
         self.setWindowTitle("Shriek - Connected to " + self.ip_input.text() + " as " + self.name_input.text())
@@ -88,8 +93,10 @@ class Window(QMainWindow):
         elif name == "room_update":
             self.emitter.room_update(data)
         elif name == "join_deny":
+            print("Denied!")
             self.connection_error.setText(data["message"])
-            self.connection_dialog.open()
+        elif name == "join_accept":
+            self.connection_dialog.hide()
 
     def server_thread(self):
         while True:
@@ -161,15 +168,21 @@ class Window(QMainWindow):
             if len(self.name_input.text()) < 3:
                 raise Exception("Username too short")
             
+            if not self.is_connected:
             
-            # Connect to server
-            sock.connect((self.ip_input.text(), int(self.port_input.text())))
+            
+                # Connect to server
+                sock.connect((self.ip_input.text(), int(self.port_input.text())))
 
-            self.connection_dialog.close()
+            
 
-            # Start server thread
-            self.socket_thread = Thread(target=self.server_thread)
-            self.socket_thread.start()
+                # Start server thread
+                self.socket_thread = Thread(target=self.server_thread)
+                self.socket_thread.start()
+                self.is_connected = True
+            self.send_data("join", {"username": self.name_input.text()})
+
+    
 
         except Exception as e:
             self.connection_error.setText(str(e))

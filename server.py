@@ -59,8 +59,8 @@ def handle_message(message: dict, client_sock: socket.socket):
         if len(message["username"]) > 0 and not userman.get_user(message["username"]):
             print(f"Registering new user and sending update to clients")
             userman.create_user(message["username"], sid)
+            send_data("join_accept", {}, client_sock)
             send_room_update()
-            send_data("system_message", {"message": message["username"] + " has entered the chat."}, None)
         else:
             print(f"Rejecting join request due to invalid username: {message["username"]}")
             send_data("join_deny", {"message": "Invalid username"}, client_sock)
