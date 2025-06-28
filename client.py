@@ -1,13 +1,5 @@
 import socket
-import subprocess
 import sys
-
-def install(package: str):
-    with open("log.txt", "w+") as file:
-        subprocess.check_call([sys.executable, "-m", "pip", "install", package], stdout=file)
-
-install("pyside6")
-install("markdown")
 
 from PySide6.QtCore import (
     Qt,
