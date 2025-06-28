@@ -1,1 +1,0 @@
-END = "␃".encode("utf-8")

@@ -32,11 +32,12 @@ from PySide6.QtWidgets import (
     QSizePolicy,
     QTextEdit,
 )
-import chars
 import json
 from threading import Thread
 import markdown
 import html
+
+END = "␃".encode("utf-8")
 
 sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
 
@@ -84,6 +85,8 @@ class Window(QMainWindow):
         # Setup window title
         self.setWindowTitle("Shriek - Connected to " + self.ip_input.text() + " as " + self.name_input.text())
 
+        if not self.is_connected: sys.exit(0)
+
     def handle_message(self, data: dict):
         name = data["type"] # What type of message this is
         if name == "user_message":
@@ -113,9 +116,9 @@ class Window(QMainWindow):
                     disconnected = True
                     break
 
-                if data.endswith(chars.END): got_to_end = True
+                if data.endswith(END): got_to_end = True
             
-            data = data.removesuffix(chars.END)
+            data = data.removesuffix(END)
             if disconnected: break
             self.handle_message(json.loads(data))
         
@@ -196,7 +199,7 @@ class Window(QMainWindow):
 
     def send_data(self, name: str, data: dict):
         data["type"] = name
-        data_text = json.dumps(data).encode("utf-8") + chars.END
+        data_text = json.dumps(data).encode("utf-8") + END
         try:
             sock.send(data_text)
         except BrokenPipeError:
@@ -266,5 +269,5 @@ if __name__ == "__main__":
     window.show()
     app.exec()
     sock.shutdown(socket.SHUT_RDWR)
-    window.socket_thread.join()
+    if window.socket_thread: window.socket_thread.join()
     sock.close()

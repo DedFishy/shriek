@@ -10,9 +10,10 @@ print(title)
 
 import socket
 from threading import Thread
-import chars
 import json
 from userman import UserManager
+
+END = "␃".encode("utf-8")
 
 PORT = 44375
 
@@ -30,7 +31,7 @@ CHUNK = 512
 
 def send_data(name, data: dict, client_sock: socket.socket|None):
     data["type"] = name
-    data_text = json.dumps(data).encode("utf-8") + chars.END
+    data_text = json.dumps(data).encode("utf-8") + END
     if client_sock:
         client_sock.send(data_text)
     else:
@@ -79,9 +80,9 @@ def client_thread(client_sock: socket.socket, address: tuple):
                 disconnected = True
                 break
 
-            if data.endswith(chars.END): got_to_end = True
+            if data.endswith(END): got_to_end = True
         
-        data = data.removesuffix(chars.END)
+        data = data.removesuffix(END)
         
         if disconnected: break
 
